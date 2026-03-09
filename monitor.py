@@ -52,7 +52,7 @@ SALE_KEYWORDS = [
 # M5 相關關鍵字（確認是 M5 機型，避免誤報）
 M5_KEYWORDS = ["M5", "m5"]
 
-CHECK_INTERVAL_SECONDS = int(os.getenv("CHECK_INTERVAL_SECONDS", 3600))  # 預設每小時
+CHECK_INTERVAL_SECONDS = int(os.getenv("CHECK_INTERVAL_SECONDS", 1800))  # 預設每 30 分鐘
 
 # ── Email 設定（從 .env 讀取）────────────────────────────────────────────────
 SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
