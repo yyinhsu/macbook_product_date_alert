@@ -52,6 +52,9 @@ SALE_KEYWORDS = [
 # M5 相關關鍵字（確認是 M5 機型，避免誤報）
 M5_KEYWORDS = ["M5", "m5"]
 
+# 「即將推出」文字（若此文字消失，表示可能已開放購買）
+COMING_SOON_TEXT = "推出日期，敬請期待：全新機型。"
+
 CHECK_INTERVAL_SECONDS = int(os.getenv("CHECK_INTERVAL_SECONDS", 1800))  # 預設每 30 分鐘
 
 # ── Email 設定（從 .env 讀取）────────────────────────────────────────────────
@@ -89,14 +92,18 @@ def page_fingerprint(html: str) -> str:
 def check_m5_sale(html: str, url: str) -> tuple[bool, str]:
     """
     回傳 (已上市, 摘要文字)。
-    條件：頁面同時含有 M5 關鍵字 + 銷售關鍵字。
+    觸發條件（任一）：
+      1. 頁面同時含有 M5 關鍵字 + 銷售關鍵字
+      2. 頁面含有 M5 關鍵字 + 「推出日期，敬請期待」文字消失
     """
     soup = BeautifulSoup(html, "html.parser")
     text = soup.get_text(" ", strip=True)
 
     has_m5 = any(kw in text for kw in M5_KEYWORDS)
     sale_kw_found = [kw for kw in SALE_KEYWORDS if kw in text]
+    coming_soon_gone = COMING_SOON_TEXT not in text
 
+    # 條件 1：有 M5 + 有銷售關鍵字
     if has_m5 and sale_kw_found:
         snippet = _extract_snippet(text, sale_kw_found[0])
         summary = (
@@ -104,6 +111,16 @@ def check_m5_sale(html: str, url: str) -> tuple[bool, str]:
             f"偵測到 M5 關鍵字：✓\n"
             f"偵測到銷售關鍵字：{sale_kw_found}\n"
             f"相關段落：\n{snippet}"
+        )
+        return True, summary
+
+    # 條件 2：有 M5 + 「即將推出」文字消失
+    if has_m5 and coming_soon_gone:
+        summary = (
+            f"頁面：{url}\n"
+            f"偵測到 M5 關鍵字：✓\n"
+            f"「{COMING_SOON_TEXT}」文字已消失！\n"
+            f"這可能表示產品即將或已經開放購買，請立即查看官網。"
         )
         return True, summary
 
