@@ -2,61 +2,73 @@
 
 自動監控 Apple 台灣官網，當 MacBook Pro M5 公布銷售日期時，立即寄 Email 通知你。
 
-## 快速開始
+---
 
-### 1. 安裝依賴
+## 方案一：GitHub Actions（免費、免伺服器）
+
+### 步驟 1：Fork 或 push 到你的 GitHub repo
+
+### 步驟 2：設定 GitHub Secrets
+
+進入你的 repo → **Settings → Secrets and variables → Actions → New repository secret**，新增以下三個 Secrets：
+
+| Secret 名稱 | 說明 |
+|------------|------|
+| `SMTP_USER` | Gmail 帳號（例如 `yourname@gmail.com`） |
+| `SMTP_PASS` | Gmail **應用程式密碼**（非登入密碼，見下方說明） |
+| `NOTIFY_TO` | 收件信箱（可填和 SMTP_USER 相同） |
+
+> **如何取得 Gmail 應用程式密碼：**
+> 1. 開啟 [Google 帳戶安全性設定](https://myaccount.google.com/security)
+> 2. 啟用「兩步驟驗證」
+> 3. 搜尋「應用程式密碼」→ 選擇應用程式：郵件 → 產生
+> 4. 複製產生的 16 位密碼填入 `SMTP_PASS`
+
+### 步驟 3：啟用 Actions
+
+- 進入 repo 的 **Actions** 頁面
+- 若看到提示，點擊「I understand my workflows, go ahead and enable them」
+
+完成！每 30 分鐘自動檢查一次。偵測到 M5 上市後：
+1. 寄信通知你
+2. 自動在 repo 建立 `notified.flag` 檔案（防止重複寄信）
+3. 之後所有執行都會略過
+
+### 手動觸發測試
+
+Actions → **MacBook Pro M5 Monitor** → **Run workflow**
+
+---
+
+## 方案二：本地 / VPS 執行
+
+### 安裝依賴
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2. 設定 Email
-
-複製範本並填入你的資訊：
+### 設定 Email
 
 ```bash
 cp .env.example .env
+# 編輯 .env，填入 Gmail 帳號與應用程式密碼
 ```
 
-編輯 `.env`：
-
-```env
-SMTP_USER=your_gmail@gmail.com
-SMTP_PASS=your_app_password   # Google 應用程式密碼
-NOTIFY_TO=your_email@example.com
-CHECK_INTERVAL_SECONDS=3600   # 每小時檢查一次
-```
-
-> **Gmail 應用程式密碼設定**：Google 帳戶 → 安全性 → 兩步驟驗證 → 應用程式密碼
-
-### 3. 執行
+### 執行
 
 ```bash
+# 前景執行
 python monitor.py
-```
 
-程式會持續在背景執行，偵測到上市資訊後寄信並自動停止。
-
-## 背景執行（建議）
-
-```bash
-# Linux / macOS
+# 背景執行
 nohup python monitor.py &
-
-# 或使用 screen
-screen -S m5-monitor
-python monitor.py
-# Ctrl+A, D 退出 screen
 ```
+
+---
 
 ## 運作邏輯
 
-1. 每隔 `CHECK_INTERVAL_SECONDS` 秒抓取 Apple 台灣官網
-2. 偵測頁面是否同時出現 **M5 關鍵字** 與 **銷售關鍵字**（如「立即購買」、「加入購物車」）
-3. 頁面內容有變化時才進行關鍵字分析（避免重複判斷）
-4. 觸發條件成立 → 寄送 Email → 程式結束
-
-## 監控網址
-
-- `https://www.apple.com/tw/shop/buy-mac/macbook-pro`
-- `https://www.apple.com/tw/macbook-pro/`
+1. 每 30 分鐘抓取 Apple 台灣 MacBook Pro 頁面
+2. 同時出現 **M5 關鍵字** + **銷售關鍵字**（如「立即購買」）才觸發
+3. 觸發後寄送 Email，並寫入 `notified.flag` 防止重複通知

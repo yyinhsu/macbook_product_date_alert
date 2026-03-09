@@ -1,0 +1,54 @@
+name: MacBook Pro M5 Monitor
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"   # 每 30 分鐘執行一次
+  workflow_dispatch:          # 允許手動觸發（方便測試）
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write         # 需要寫入 notified.flag 並 commit 回 repo
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Check if already notified
+        id: flag
+        run: |
+          if [ -f "notified.flag" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Python
+        if: steps.flag.outputs.skip == 'false'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        if: steps.flag.outputs.skip == 'false'
+        run: pip install -r requirements.txt
+
+      - name: Run monitor (single check)
+        if: steps.flag.outputs.skip == 'false'
+        env:
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          NOTIFY_TO: ${{ secrets.NOTIFY_TO }}
+        run: python monitor.py --once
+
+      - name: Commit notified.flag if created
+        if: steps.flag.outputs.skip == 'false'
+        run: |
+          if [ -f "notified.flag" ]; then
+            git config user.name  "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add notified.flag
+            git commit -m "chore: mark M5 notification as sent"
+            git push
+          fi

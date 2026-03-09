@@ -2,10 +2,14 @@
 """
 MacBook Pro M5 台灣官網上市日期監控工具
 當 Apple 台灣官網公布 MacBook Pro M5 銷售日期時，自動寄信通知。
+
+執行模式：
+  python monitor.py          → 本地 loop 模式（每 30 分鐘檢查一次）
+  python monitor.py --once   → 單次執行（GitHub Actions 用）
 """
 
 import os
-import re
+import sys
 import time
 import smtplib
 import logging
@@ -13,6 +17,7 @@ import hashlib
 from datetime import datetime
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from pathlib import Path
 
 import requests
 from bs4 import BeautifulSoup
@@ -20,13 +25,18 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# GitHub Actions 環境下不寫 log 檔（stdout 即是 Actions log）
+IS_ACTIONS = os.getenv("GITHUB_ACTIONS") == "true"
+ONCE_MODE = "--once" in sys.argv or IS_ACTIONS
+
+handlers: list[logging.Handler] = [logging.StreamHandler()]
+if not IS_ACTIONS:
+    handlers.append(logging.FileHandler("monitor.log", encoding="utf-8"))
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
-    handlers=[
-        logging.StreamHandler(),
-        logging.FileHandler("monitor.log", encoding="utf-8"),
-    ],
+    handlers=handlers,
 )
 log = logging.getLogger(__name__)
 
@@ -57,7 +67,10 @@ COMING_SOON_TEXT = "推出日期，敬請期待：全新機型。"
 
 CHECK_INTERVAL_SECONDS = int(os.getenv("CHECK_INTERVAL_SECONDS", 1800))  # 預設每 30 分鐘
 
-# ── Email 設定（從 .env 讀取）────────────────────────────────────────────────
+# 已通知的 flag 檔（存在代表已寄信，避免重複通知）
+NOTIFIED_FLAG = Path("notified.flag")
+
+# ── Email 設定（從 .env 或環境變數讀取）──────────────────────────────────────
 SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
 SMTP_PORT = int(os.getenv("SMTP_PORT", 587))
 SMTP_USER = os.getenv("SMTP_USER", "")
@@ -172,20 +185,40 @@ def send_email(subject: str, body: str) -> bool:
         return False
 
 
-def run():
+def check_once() -> bool:
+    """單次執行：檢查各頁面，回傳是否已寄出通知。"""
+    for url in WATCH_URLS:
+        log.info("檢查：%s", url)
+        html = fetch_page(url)
+        if html is None:
+            continue
+
+        found, summary = check_m5_sale(html, url)
+        if found:
+            log.info("偵測到 MacBook Pro M5 上市資訊！")
+            subject = "[通知] MacBook Pro M5 已在 Apple 台灣官網上市！"
+            if send_email(subject, summary):
+                NOTIFIED_FLAG.write_text(datetime.now().isoformat())
+                return True
+        else:
+            log.info("  ↳ 尚未偵測到 M5 銷售資訊")
+
+    return False
+
+
+def run_loop():
+    """本地持續執行模式。"""
     log.info("═" * 60)
-    log.info("MacBook Pro M5 監控啟動")
+    log.info("MacBook Pro M5 監控啟動（loop 模式）")
     log.info("監控網址：%s", WATCH_URLS)
     log.info("檢查間隔：%d 秒", CHECK_INTERVAL_SECONDS)
     log.info("通知信箱：%s", NOTIFY_TO or "（未設定）")
     log.info("═" * 60)
 
-    notified = False
     prev_fingerprints: dict[str, str] = {}
 
-    while not notified:
-        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        log.info("[%s] 開始檢查...", now)
+    while True:
+        log.info("[%s] 開始檢查...", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
         for url in WATCH_URLS:
             html = fetch_page(url)
@@ -193,32 +226,33 @@ def run():
                 continue
 
             fp = page_fingerprint(html)
-            if prev_fingerprints.get(url) != fp:
-                log.info("  ↳ %s 內容有變化，分析中...", url)
-                prev_fingerprints[url] = fp
-            else:
+            if prev_fingerprints.get(url) == fp:
                 log.info("  ↳ %s 無變化", url)
                 continue
 
+            log.info("  ↳ %s 內容有變化，分析中...", url)
+            prev_fingerprints[url] = fp
+
             found, summary = check_m5_sale(html, url)
             if found:
-                log.info("🎉 偵測到 MacBook Pro M5 上市資訊！")
-                log.info(summary)
-                subject = f"[通知] MacBook Pro M5 已在 Apple 台灣官網上市！"
-                sent = send_email(subject, summary)
-                if sent:
-                    notified = True
-                    break
+                log.info("偵測到 MacBook Pro M5 上市資訊！")
+                subject = "[通知] MacBook Pro M5 已在 Apple 台灣官網上市！"
+                if send_email(subject, summary):
+                    log.info("通知已送出，程式結束。")
+                    return
             else:
                 log.info("  ↳ 尚未偵測到 M5 銷售資訊")
-
-        if notified:
-            log.info("通知已送出，程式結束。")
-            break
 
         log.info("等待 %d 秒後再次檢查...\n", CHECK_INTERVAL_SECONDS)
         time.sleep(CHECK_INTERVAL_SECONDS)
 
 
 if __name__ == "__main__":
-    run()
+    if ONCE_MODE:
+        # GitHub Actions 單次模式
+        if NOTIFIED_FLAG.exists():
+            log.info("已於 %s 寄出通知，略過本次檢查。", NOTIFIED_FLAG.read_text())
+            sys.exit(0)
+        check_once()
+    else:
+        run_loop()
