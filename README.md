@@ -69,6 +69,9 @@ nohup python monitor.py &
 
 ## 運作邏輯
 
-1. 每 30 分鐘抓取 Apple 台灣 MacBook Pro 頁面
-2. 同時出現 **M5 關鍵字** + **銷售關鍵字**（如「立即購買」）才觸發
-3. 觸發後寄送 Email，並寫入 `notified.flag` 防止重複通知
+1. 每 30 分鐘抓取 Apple 台灣 MacBook Pro 頁面（`/shop/buy-mac/macbook-pro` 與 `/macbook-pro/`）
+2. 滿足以下**任一條件**即觸發通知：
+   - **條件 1**：頁面同時出現 **M5 關鍵字** + **銷售關鍵字**（如「立即購買」、「加入購物車」、「預購」等）
+   - **條件 2**：頁面出現 **M5 關鍵字**，且「推出日期，敬請期待：全新機型。」文字**消失**
+3. Loop 模式下額外偵測頁面 **MD5 fingerprint** 變化，僅在內容改變時才深度分析
+4. 觸發後寄送 Email，並寫入 `notified.flag` 防止重複通知
