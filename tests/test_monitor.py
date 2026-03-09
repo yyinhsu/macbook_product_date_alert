@@ -147,14 +147,14 @@ class TestCheckOnce(unittest.TestCase):
 
     @patch("monitor.send_email", return_value=True)
     @patch("monitor.fetch_page", return_value="<p>M5 立即購買</p>")
-    def test_sends_email_and_writes_flag(self, _fetch, _send, tmp_path=None):
-        flag = Path("notified.flag")
-        flag.unlink(missing_ok=True)
-        with patch.object(monitor, "NOTIFIED_FLAG", Path("notified.flag")):
-            result = monitor.check_once()
-        self.assertTrue(result)
-        self.assertTrue(Path("notified.flag").exists())
-        Path("notified.flag").unlink(missing_ok=True)  # 清理
+    def test_sends_email_and_writes_flag(self, _fetch, _send):
+        import tempfile, os
+        with tempfile.TemporaryDirectory() as tmp:
+            flag = Path(tmp) / "notified.flag"
+            with patch.object(monitor, "NOTIFIED_FLAG", flag):
+                result = monitor.check_once()
+            self.assertTrue(result)
+            self.assertTrue(flag.exists())
 
     @patch("monitor.send_email", return_value=True)
     @patch("monitor.fetch_page", return_value=None)
