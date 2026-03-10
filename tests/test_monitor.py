@@ -25,8 +25,16 @@ def _html(body: str) -> str:
 
 class TestCheckM5Sale(unittest.TestCase):
 
-    def test_no_m5_keyword_returns_false(self):
+    def test_no_m5_but_coming_soon_gone_triggers_condition3(self):
+        """無 M5 關鍵字，但「推出日期，敬請期待」也不在頁面 → 條件 3 觸發（保守通知）"""
         html = _html("<p>立即購買 MacBook Air</p>")
+        found, summary = monitor.check_m5_sale(html, URL)
+        self.assertTrue(found)
+        self.assertIn("建議手動前往官網確認", summary)
+
+    def test_coming_soon_present_no_trigger(self):
+        """「推出日期，敬請期待」仍在頁面（無 M5）→ 不觸發"""
+        html = _html(f"<p>MacBook Pro {monitor.COMING_SOON_TEXT}</p>")
         found, _ = monitor.check_m5_sale(html, URL)
         self.assertFalse(found)
 
@@ -57,9 +65,11 @@ class TestCheckM5Sale(unittest.TestCase):
                 found, _ = monitor.check_m5_sale(html, URL)
                 self.assertTrue(found, f"關鍵字「{kw}」應觸發但未觸發")
 
-    def test_empty_page_returns_false(self):
-        found, _ = monitor.check_m5_sale(_html(""), URL)
-        self.assertFalse(found)
+    def test_empty_page_triggers_condition3(self):
+        """空頁面沒有「推出日期，敬請期待」→ 條件 3 觸發（保守通知）"""
+        found, summary = monitor.check_m5_sale(_html(""), URL)
+        self.assertTrue(found)
+        self.assertIn("建議手動前往官網確認", summary)
 
 
 # ── page_fingerprint ──────────────────────────────────────────────────────────
