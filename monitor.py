@@ -108,6 +108,7 @@ def check_m5_sale(html: str, url: str) -> tuple[bool, str]:
     觸發條件（任一）：
       1. 頁面同時含有 M5 關鍵字 + 銷售關鍵字
       2. 頁面含有 M5 關鍵字 + 「推出日期，敬請期待」文字消失
+      3. 「推出日期，敬請期待」文字消失（不論是否含 M5 關鍵字）
     """
     soup = BeautifulSoup(html, "html.parser")
     text = soup.get_text(" ", strip=True)
@@ -134,6 +135,18 @@ def check_m5_sale(html: str, url: str) -> tuple[bool, str]:
             f"偵測到 M5 關鍵字：✓\n"
             f"「{COMING_SOON_TEXT}」文字已消失！\n"
             f"這可能表示產品即將或已經開放購買，請立即查看官網。"
+        )
+        return True, summary
+
+    # 條件 3：「即將推出」文字消失（保守通知）
+    if coming_soon_gone:
+        summary = (
+            f"頁面：{url}\n"
+            f"「{COMING_SOON_TEXT}」文字已從頁面消失。\n"
+            f"\n"
+            f"注意：此次偵測未發現 M5 關鍵字或明確銷售資訊，\n"
+            f"頁面變動原因不確定，可能是網站改版或其他調整。\n"
+            f"建議手動前往官網確認實際狀況，勿直接視為上市通知。"
         )
         return True, summary
 
